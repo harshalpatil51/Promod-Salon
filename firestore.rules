@@ -1,0 +1,82 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function owns(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    match /users/{uid} {
+      allow read: if owns(uid);
+      allow create, update: if owns(uid)
+        && request.resource.data.keys().hasOnly([
+          'shopName', 'ownerName', 'phone', 'address', 'updatedAt'
+        ])
+        && request.resource.data.shopName is string
+        && request.resource.data.shopName.size() > 0
+        && request.resource.data.shopName.size() <= 80
+        && request.resource.data.ownerName is string
+        && request.resource.data.ownerName.size() <= 80
+        && request.resource.data.phone is string
+        && request.resource.data.phone.size() <= 20
+        && request.resource.data.address is string
+        && request.resource.data.address.size() <= 200
+        && request.resource.data.updatedAt is timestamp;
+      allow delete: if false;
+
+      match /{recordType}/{recordId} {
+        function validTransaction() {
+          return request.resource.data.keys().hasOnly([
+              'id', 'category', 'amount', 'date', 'updatedAt'
+            ])
+            && request.resource.data.keys().hasAll(['id', 'category', 'amount', 'date', 'updatedAt'])
+            && request.resource.data.id == recordId
+            && request.resource.data.category is string
+            && request.resource.data.category.size() > 0
+            && request.resource.data.amount is number
+            && request.resource.data.amount > 0
+            && request.resource.data.date is string
+            && request.resource.data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+            && request.resource.data.updatedAt is timestamp;
+        }
+
+        function validCredit() {
+          return request.resource.data.keys().hasOnly([
+              'id', 'name', 'phone', 'category', 'detail', 'amount', 'date',
+              'settled', 'settledAt', 'updatedAt'
+            ])
+            && request.resource.data.keys().hasAll([
+              'id', 'name', 'phone', 'category', 'detail', 'amount', 'date',
+              'settled', 'updatedAt'
+            ])
+            && request.resource.data.id == recordId
+            && request.resource.data.name is string
+            && request.resource.data.name.size() > 0
+            && request.resource.data.name.size() <= 80
+            && request.resource.data.phone is string
+            && request.resource.data.phone.size() <= 20
+            && request.resource.data.category is string
+            && request.resource.data.category.size() > 0
+            && request.resource.data.detail is string
+            && request.resource.data.detail.size() <= 120
+            && request.resource.data.amount is number
+            && request.resource.data.amount > 0
+            && request.resource.data.date is string
+            && request.resource.data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+            && request.resource.data.settled is bool
+            && request.resource.data.updatedAt is timestamp
+            && (!('settledAt' in request.resource.data)
+              || request.resource.data.settledAt is string);
+        }
+
+        allow read: if owns(uid)
+          && recordType in ['incomes', 'expenses', 'credits'];
+        allow create, update: if owns(uid)
+          && ((recordType in ['incomes', 'expenses'] && validTransaction())
+            || (recordType == 'credits' && validCredit()));
+        allow delete: if owns(uid)
+          && recordType in ['incomes', 'expenses', 'credits'];
+      }
+    }
+  }
+}
